@@ -144,7 +144,7 @@ def get_templatename(f):
 # PARAMETERS
 
 #sim duration
-tstop = 1000.
+tstop = 50.
 dt = 2**-6
 
 PointProcParams = {
@@ -170,6 +170,7 @@ apply_filter = True
 #communication buffer where all simulation output will be gathered on RANK 0
 COMM_DICT = {}
 
+largest_soma_diam = 14.1402
 COUNTER = 0
 for i, NRN in enumerate(neurons):
     os.chdir(NRN)
@@ -224,19 +225,31 @@ for i, NRN in enumerate(neurons):
                              tstop=tstop,
                              dt=dt,
                              nsegs_method=None)
-        
-            #set view as in most other examples
-            cell.set_rotation(x=np.pi/2)
-    
-    
-            
-            pointProcess = LFPy.StimIntElectrode(cell, **PointProcParams)
+            synapseParameters = {
+                            'syntype' : 'Exp2Syn',
+                            'e' : 0.,
+                            'tau1' : 0.5,
+                            'tau2' : 2.0,
+                            'weight' : .05,
+                            'record_current' : True,
+                            }
 
-            electrode = LFPy.RecExtElectrode(x = np.array([-40, 40., 0, 0]),
-                                             y=np.array([0, 0, -40, 40]),
-                                             z=np.zeros(4),
+            cell.set_rotation(x=np.pi/2)
+            i=0
+            for seg in cell.allseclist:
+                if i == 0:
+                    soma_diam = seg.diam
+                i+=1
+            synapse = LFPy.Synapse(cell,
+                                idx = cell.get_closest_idx(z=0),
+                                **synapseParameters)
+            synapse.set_spike_times(np.array([10]))
+
+            electrode = LFPy.RecExtElectrode(x = np.array([np.ceil(soma_diam/2), np.ceil(largest_soma_diam/2)]),
+                                             y=np.array([0, 0]),
+                                             z=np.zeros(2),
                                              sigma=0.3, r=5, n=50,
-                                             N=np.array([[1, 0, 0], [1, 0, 0], [1, 0, 0], [1, 0, 0]]),
+                                             N=np.array([[1, 0, 0], [1, 0, 0]]),
                                              method='soma_as_point')
             
             #run simulation
