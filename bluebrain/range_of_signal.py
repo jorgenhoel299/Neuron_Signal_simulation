@@ -144,7 +144,7 @@ def get_templatename(f):
 # PARAMETERS
 
 #sim duration
-tstop = 50.
+tstop = 30.
 dt = 2**-6
 
 PointProcParams = {
@@ -244,24 +244,31 @@ for i, NRN in enumerate(neurons):
                                 idx = cell.get_closest_idx(z=0),
                                 **synapseParameters)
             synapse.set_spike_times(np.array([10]))
-            X = np.linspace(largest_soma_diam, 10*largest_soma_diam, 5)
-            Y = np.zeros(5)
-            Z = np.zeros(5)
-            electrode = LFPy.RecExtElectrode(x=X,
-                                             y=Y,
-                                             z=Z,
+            X, Y, Z = np.mgrid[-4:5:1, 1:2, -4:5:1] * 20
+            electrode = LFPy.RecExtElectrode(x=X.flatten(),
+                                             y=Y.flatten(),
+                                             z=Z.flatten(),
                                              sigma=0.3, r=5, n=50,
-                                             N=np.array([[1, 0, 0]]*5),
+                                             N=np.array([[1, 0, 0]]*81),
                                              method='soma_as_point')
             
             #run simulation
             cell.simulate(electrode=electrode)
-    
             #electrode.calc_lfp()
             LFP = electrode.LFP
+            tresh = 0.0015
             if apply_filter:
                 LFP = ss.filtfilt(b, a, LFP, axis=-1)
-            
+
+            i = 0     #Flag for checking if the cell has already not found an amp
+            for i, row in enumerate(LFP):
+                amp = (row.max() - row.min())/2
+                if amp < tresh:
+                    if i == 0:
+                        i = 1
+                        print('For {0} {1}, the following electrodes had lower amplitude then treshold ({2}mV'.format(templatename, morphologyfile, tresh))
+                    pos = (X.flatten()[i], Y.flatten()[i], Z.flatten()[i])
+                    print('At pos {0} (distance {1}) with amplitude {2}'.format(pos, np.linalg.norm(pos), amp))
             #detect action potentials from intracellular trace
             AP_train = np.zeros(cell.somav.size, dtype=int)
             crossings = (cell.somav[:-1] < threshold) & (cell.somav[1:] >= threshold)
