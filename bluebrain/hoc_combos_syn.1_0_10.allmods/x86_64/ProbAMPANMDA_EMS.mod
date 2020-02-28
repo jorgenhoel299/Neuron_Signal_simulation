@@ -1,1 +1,0 @@
-../ProbAMPANMDA_EMS.mod
