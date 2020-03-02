@@ -271,7 +271,9 @@ for i, NRN in enumerate(neurons):
             for i, row in enumerate(LFP):
                 amp[i] = (row.max() - row.min())/2
             amps.loc[NRN[30:]] = amp
-
+            #Storing data as csv-file
+            three_up =  os.path.abspath(os.path.join(__file__ ,"../../.."))
+            amps.to_csv(three_up+'/amplitudes')
             #detect action potentials from intracellular trace
             AP_train = np.zeros(cell.somav.size, dtype=int)
             crossings = (cell.somav[:-1] < threshold) & (cell.somav[1:] >= threshold)
