@@ -21,7 +21,8 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 """
-
+import matplotlib
+matplotlib.use('AGG')
 import os
 import posixpath
 import sys
@@ -35,7 +36,7 @@ import scipy.signal as ss
 import neuron
 import LFPy
 from mpi4py import MPI
-
+import pandas as pd
 
 plt.rcParams.update({
     'axes.labelsize' : 8,
@@ -50,6 +51,7 @@ COMM = MPI.COMM_WORLD
 SIZE = COMM.Get_size()
 RANK = COMM.Get_rank()
 
+amps = pd.DataFrame(columns=['amplitude', 'r_soma'])
 
 #working dir
 CWD = os.getcwd()
@@ -60,11 +62,11 @@ neuron.h.load_file("stdrun.hoc")
 neuron.h.load_file("import3d.hoc")
 
 #load only some layer 5 pyramidal cell types
-#neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L*'))
-neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_TTPC*'))[:1]
-neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_MC*'))[:1]
-neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_LBC*'))[:1]
-neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_NBC*'))[:1]
+neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L*'))
+# neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_TTPC*'))[:1]
+# neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_MC*'))[:1]
+# neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_LBC*'))[:1]
+# neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_NBC*'))[:1]
 
 #flag for cell template file to switch on (inactive) synapses
 add_synapses = False
@@ -234,7 +236,6 @@ for i, NRN in enumerate(neurons):
                             'weight' : .05,
                             'record_current' : True,
                             }
-            print('hei')
             cell.set_rotation(x=np.pi/2)
             i=0
             for seg in cell.allseclist:
@@ -246,9 +247,9 @@ for i, NRN in enumerate(neurons):
                                 **synapseParameters)
             synapse.set_spike_times(np.array([10]))
 
-            electrode = LFPy.RecExtElectrode(x = np.array([np.ceil(soma_diam/2), np.ceil(largest_soma_diam/2)]),
-                                             y=np.array([0, 0]),
-                                             z=np.zeros(2),
+            electrode = LFPy.RecExtElectrode(x = np.array([soma_diam/2+1]),
+                                             y=np.zeros(1),
+                                             z=np.zeros(1),
                                              sigma=0.3, r=5, n=50,
                                              N=np.array([[1, 0, 0], [1, 0, 0]]),
                                              method='soma_as_point')
@@ -260,7 +261,9 @@ for i, NRN in enumerate(neurons):
             LFP = electrode.LFP
             if apply_filter:
                 LFP = ss.filtfilt(b, a, LFP, axis=-1)
-            
+            amps.loc[NRN[30:]] = [(np.max(LFP)-np.min(LFP)/2), soma_diam/2]
+            three_up =  os.path.abspath(os.path.join(__file__ ,"../../.."))
+            amps.to_csv(three_up+'/amplitude_at_soma')
             #detect action potentials from intracellular trace
             AP_train = np.zeros(cell.somav.size, dtype=int)
             crossings = (cell.somav[:-1] < threshold) & (cell.somav[1:] >= threshold)
@@ -286,79 +289,7 @@ for i, NRN in enumerate(neurons):
                     spw = spw,
                 )
             })
-            
-            #plot
-            gs = GridSpec(2, 3)
-            fig = plt.figure(figsize=(10, 8))
-            fig.suptitle(NRN + '\n' + os.path.split(morphologyfile)[-1].strip('.asc'))
-            
-            #morphology
-            zips = []
-            for x, z in cell.get_idx_polygons(projection=('x', 'z')):
-                zips.append(list(zip(x, z)))    
-            polycol = PolyCollection(zips,
-                                     edgecolors='none',
-                                     facecolors='k',
-                                     rasterized=True)
-            ax = fig.add_subplot(gs[:, 0])
-            ax.add_collection(polycol)
-            plt.plot(electrode.x, electrode.z, 'ro')
-            ax.axis(ax.axis('equal'))
-            ax.set_title('morphology')
-            ax.set_xlabel('(um)', labelpad=0)
-            ax.set_ylabel('(um)', labelpad=0)
-    
-            #soma potential and spikes
-            ax = fig.add_subplot(gs[0, 1])
-            ax.plot(cell.tvec, cell.somav, rasterized=True)
-            ax.plot(cell.tvec, AP_train*20 + 50)
-            ax.axis(ax.axis('tight'))
-            ax.set_title('soma voltage, spikes')
-            ax.set_ylabel('(mV)', labelpad=0)
-    
-            #extracellular potential
-            ax = fig.add_subplot(gs[1, 1])
-            for l in LFP:           
-                ax.plot(cell.tvec, l, rasterized=True)
-            ax.axis(ax.axis('tight'))
-            ax.set_title('extracellular potential')
-            ax.set_xlabel('(ms)', labelpad=0)
-            ax.set_ylabel('(mV)', labelpad=0)
-            
-            #spike waveform
-            ax = fig.add_subplot(gs[0, 2])
-            n = electrode.x.size
-            for j in range(n):
-                zips = []
-                for x in spw[j::n,]:
-                    zips.append(list(zip(tspw, x)))
-                linecol = LineCollection(zips,
-                                         linewidths=0.5,
-                                         colors=plt.cm.Spectral(int(255.*j/n)),
-                                         rasterized=True)
-                ax.add_collection(linecol)
-                #ax.plot(tspw, x, rasterized=True)
-            ax.axis(ax.axis('tight'))
-            ax.set_title('spike waveforms')
-            ax.set_ylabel('(mV)', labelpad=0)
-            
-            #spike width vs. p2p amplitude
-            ax = fig.add_subplot(gs[1, 2])
-            w = []
-            p2p = []
-            for x in spw:
-                j = x == x.min()
-                i = x == x[np.where(j)[0][0]:].max()
-                w += [(tspw[i] - tspw[j])[0]]
-                p2p += [(x[i] - x[j])[0]]
-            ax.plot(w, p2p, 'o', lw=0.1, markersize=5, mec='none')
-            ax.set_title('spike peak-2-peak time and amplitude')
-            ax.set_xlabel('(ms)', labelpad=0)
-            ax.set_ylabel('(mV)', labelpad=0)
-            
-            fig.savefig(os.path.join(CWD, FIGS, os.path.split(NRN)[-1] + '_' + os.path.split(morphologyfile)[-1].replace('.asc', '.pdf')), dpi=200)
-            plt.close(fig)
-        
+                    
         COUNTER += 1
         os.chdir(CWD)
         
@@ -374,42 +305,6 @@ if SIZE > 1:
     else:
         print('sent from RANK {}'.format(RANK))
         COMM.send(COMM_DICT, dest=0, tag=123)
-else:
-    pass
-COMM.Barrier()
-
-#project data
-if RANK == 0:
-    fig = plt.figure(figsize=(10, 8))
-    fig.suptitle('spike peak-2-peak time and amplitude')
-    n = electrode.x.size
-    for k in range(n):
-        ax = fig.add_subplot(n, 2, k*2+1)
-        for key, val in COMM_DICT.items():
-            spw = val['spw'][k::n, ]
-            w = []
-            p2p = []
-            for x in spw:
-                j = x == x.min()
-                i = x == x[np.where(j)[0][0]:].max()
-                w += [(tspw[i] - tspw[j])[0]]
-                p2p += [(x[i] - x[j])[0]]
-            if 'MC' in key:
-                marker = 'x'
-            elif 'NBC' in key:
-                marker = '+'
-            elif 'LBC' in key:
-                marker = 'd'
-            elif 'TTPC' in key:
-                marker = '^'
-            ax.plot(w, p2p, marker, lw=0.1, markersize=5, mec='none', label=key, alpha=0.25)
-        ax.set_xlabel('(ms)', labelpad=0)
-        ax.set_ylabel('(mV)', labelpad=0)
-        if k == 0:
-            ax.legend(loc='upper left', bbox_to_anchor=(1,1), frameon=False, fontsize=7)
-    fig.savefig(os.path.join(CWD, FIGS, 'P2P_time_amplitude.pdf'))
-    print("wrote {}".format(os.path.join(CWD, FIGS, 'P2P_time_amplitude.pdf')))
-    plt.close(fig)
 else:
     pass
 COMM.Barrier()
