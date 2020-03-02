@@ -61,11 +61,11 @@ neuron.h.load_file("stdrun.hoc")
 neuron.h.load_file("import3d.hoc")
 
 #load only some layer 5 pyramidal cell types
-#neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L*'))
-neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_TTPC*'))[:1]
-neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_MC*'))[:1]
-neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_LBC*'))[:1]
-neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L1_DAC_cNAC187_2'))
+neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L*'))
+# neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_TTPC*'))[:2]
+# neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_MC*'))[:2]
+# neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_LBC*'))[:2]
+# neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L1_DAC_cNAC187_2'))
 
 #flag for cell template file to switch on (inactive) synapses
 add_synapses = False
@@ -381,6 +381,34 @@ for i, NRN in enumerate(neurons):
 
 COMM.Barrier()
 
+amps=amps*1000
+fig3 = plt.figure(figsize=(10, 8))
+fig3.suptitle('P2P amplitude measured from soma')
+ax1 = fig3.add_subplot(3, 2, 1)
+ax23 = fig3.add_subplot(3, 2, 2)
+ax4 = fig3.add_subplot(3, 2, 3)
+ax5 = fig3.add_subplot(3, 2, 4)
+ax6 = fig3.add_subplot(3, 2, 5)
+axes = [ax1, ax23, ax4, ax5, ax6]
+for i, layer in enumerate(['L1', 'L23', 'L4', 'L5', 'L6']):
+    L_df = amps[amps.index.str.startswith(layer)]
+    models = [model[:-2] for model in L_df.index]
+    unique_models = list(dict.fromkeys(models))
+    for model in unique_models:
+        model_df = L_df[L_df.index.str.startswith(model)]
+        y = np.mean(model_df.values, axis=0)
+        error = np.std(model_df.values, axis=0)
+        axes[i].errorbar(distances, y, yerr=error, label=model)
+    axes[i].plot(distances, [15]*n_electrodes, 'b--', label='15uV treshold')
+    axes[i].set_title('Layer {}'.format(layer[1:]))
+    if i ==3 or i == 4:
+        axes[i].set_xlabel('Distance from soma (um)')
+    if i == 0 or i == 2 or i == 4:
+        axes[i].set_ylabel('Amplitude (uV)')
+    #axes[i].set_xticks(np.arange(np.min(distances), np.max(distances), 5))
+    axes[i].legend()
+fig3.savefig('amps_by_distance2',dpi=400)
+
 #plot amp by distance
 fig2 = plt.figure(figsize=(10, 8))
 plt.plot(distances, amps.values.T*1000)
@@ -405,39 +433,39 @@ else:
 COMM.Barrier()
 
 #project data
-if RANK == 0:
-    fig = plt.figure(figsize=(10, 8))
-    fig.suptitle('spike peak-2-peak time and amplitude')
-    n = electrode.x.size
-    for k in range(n):
-        ax = fig.add_subplot(n, 2, k*2+1)
-        for key, val in COMM_DICT.items():
-            spw = val['spw'][k::n, ]
-            w = []
-            p2p = []
-            for x in spw:
-                j = x == x.min()
-                i = x == x[np.where(j)[0][0]:].max()
-                w += [(tspw[i] - tspw[j])[0]]
-                p2p += [(x[i] - x[j])[0]]
-            if 'MC' in key:
-                marker = 'x'
-            elif 'NBC' in key:
-                marker = '+'
-            elif 'LBC' in key:
-                marker = 'd'
-            elif 'TTPC' in key:
-                marker = '^'
-            ax.plot(w, p2p, marker, lw=0.1, markersize=5, mec='none', label=key, alpha=0.25)
-        ax.set_xlabel('(ms)', labelpad=0)
-        ax.set_ylabel('(mV)', labelpad=0)
-        if k == 0:
-            ax.legend(loc='upper left', bbox_to_anchor=(1,1), frameon=False, fontsize=7)
-    fig.savefig(os.path.join(CWD, FIGS, 'P2P_time_amplitude.pdf'))
-    print("wrote {}".format(os.path.join(CWD, FIGS, 'P2P_time_amplitude.pdf')))
-    plt.close(fig)
-else:
-    pass
-COMM.Barrier()
+# if RANK == 0:
+#     fig = plt.figure(figsize=(10, 8))
+#     fig.suptitle('spike peak-2-peak time and amplitude')
+#     n = electrode.x.size
+#     for k in range(n):
+#         ax = fig.add_subplot(n, 2, k*2+1)
+#         for key, val in COMM_DICT.items():
+#             spw = val['spw'][k::n, ]
+#             w = []
+#             p2p = []
+#             for x in spw:
+#                 j = x == x.min()
+#                 i = x == x[np.where(j)[0][0]:].max()
+#                 w += [(tspw[i] - tspw[j])[0]]
+#                 p2p += [(x[i] - x[j])[0]]
+#             if 'MC' in key:
+#                 marker = 'x'
+#             elif 'NBC' in key:
+#                 marker = '+'
+#             elif 'LBC' in key:
+#                 marker = 'd'
+#             elif 'TTPC' in key:
+#                 marker = '^'
+#             ax.plot(w, p2p, marker, lw=0.1, markersize=5, mec='none', label=key, alpha=0.25)
+#         ax.set_xlabel('(ms)', labelpad=0)
+#         ax.set_ylabel('(mV)', labelpad=0)
+#         if k == 0:
+#             ax.legend(loc='upper left', bbox_to_anchor=(1,1), frameon=False, fontsize=7)
+#     fig.savefig(os.path.join(CWD, FIGS, 'P2P_time_amplitude.pdf'))
+#     print("wrote {}".format(os.path.join(CWD, FIGS, 'P2P_time_amplitude.pdf')))
+#     plt.close(fig)
+# else:
+#     pass
+# COMM.Barrier()
 
     
