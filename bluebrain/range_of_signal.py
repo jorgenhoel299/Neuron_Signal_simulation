@@ -22,6 +22,8 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 """
 
+import matplotlib
+matplotlib.use('AGG')
 import os
 import posixpath
 import sys
@@ -260,7 +262,7 @@ for i, NRN in enumerate(neurons):
             if apply_filter:
                 LFP = ss.filtfilt(b, a, LFP, axis=-1)
 
-            i = 0     #Flag for checking if the cell has already not found an amp
+            i = 0     #Flag for whether it is first unseen spike for current neuron
             for i, row in enumerate(LFP):
                 amp = (row.max() - row.min())/2
                 if amp < tresh:

@@ -21,7 +21,8 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 """
-
+import matplotlib
+matplotlib.use('AGG')
 import os
 import posixpath
 import sys
@@ -383,7 +384,7 @@ fig2 = plt.figure(figsize=(10, 8))
 plt.plot(distances, amps.values.T*1000)
 plt.plot(distances, [15]*n_electrodes, 'b--')
 plt.title('P2P amplitude measured from soma')
-plt.xlabel('Distance from soma (uM)')
+plt.xlabel('Distance from soma (um)')
 plt.ylabel('Amplitude (uV)')
 plt.legend(list(amps.index)+['15uV treshold'])
 fig2.savefig('amps_by_distance',dpi=200)
