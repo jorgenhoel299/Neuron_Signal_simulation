@@ -108,7 +108,7 @@ if not os.path.isdir(FIGS):
 
 #Recording parameters
 n_electrodes=30
-distances = np.linspace(15, 100, n_electrodes)
+distances = np.linspace(8, 100, n_electrodes)
 amps = pd.DataFrame(columns=distances)
 
 #load the LFPy SinSyn mechanism for stimulus
@@ -175,7 +175,7 @@ apply_filter = True
 
 #communication buffer where all simulation output will be gathered on RANK 0
 COMM_DICT = {}
-
+three_up =  os.path.abspath(os.path.join(__file__ ,"../../.."))
 largest_soma_diam = 14.1402
 COUNTER = 0
 for i, NRN in enumerate(neurons):
@@ -251,11 +251,11 @@ for i, NRN in enumerate(neurons):
                                 **synapseParameters)
             synapse.set_spike_times(np.array([10]))
             
-            electrode = LFPy.RecExtElectrode(x=distances,
-                                             y=np.zeros(n_electrodes),
-                                             z=np.zeros(n_electrodes),
+            electrode = LFPy.RecExtElectrode(x=np.concatenate([distances, -distances, np.zeros(n_electrodes*2)]),
+                                             y=np.concatenate([np.zeros(n_electrodes*2), distances, -distances]),
+                                             z=np.zeros(n_electrodes*4),
                                              sigma=0.3, r=5, n=50,
-                                             N=np.array([[1, 0, 0]]*30),
+                                             N=np.array([[1, 0, 0]]*2*n_electrodes+[[0, 1, 0]]*2*n_electrodes),
                                              method='soma_as_point')
             
             #run simulation
@@ -265,15 +265,12 @@ for i, NRN in enumerate(neurons):
             LFP = electrode.LFP
             if apply_filter:
                 LFP = ss.filtfilt(b, a, LFP, axis=-1)
-            
-            #
+             
             amp = np.empty(n_electrodes)
-            for i, row in enumerate(LFP):
-                amp[i] = (row.max() - row.min())/2
+            for i in range(n_electrodes):
+                amp[i] = ((LFP[i, :].max()-LFP[i, :].min())/2 + (LFP[n_electrodes+i, :].max()-LFP[n_electrodes + i, :].min())/2 
+                + (LFP[2*n_electrodes+i, :].max()-LFP[2*n_electrodes+i, :].min())/2 + (LFP[3*n_electrodes+i, :].max()-LFP[3*n_electrodes+i, :].min())/2)/4
             amps.loc[NRN[30:]] = amp
-            #Storing data as csv-file
-            three_up =  os.path.abspath(os.path.join(__file__ ,"../../.."))
-            amps.to_csv(three_up+'/amplitudes')
             #detect action potentials from intracellular trace
             AP_train = np.zeros(cell.somav.size, dtype=int)
             crossings = (cell.somav[:-1] < threshold) & (cell.somav[1:] >= threshold)
@@ -374,11 +371,13 @@ for i, NRN in enumerate(neurons):
                 fig.savefig(os.path.join(CWD, FIGS, os.path.split(NRN)[-1] + '_' + os.path.split(morphologyfile)[-1].replace('.asc', '.pdf')), dpi=200)
                 plt.close(fig)
             
-
+        if COUNTER % 5 == 0:
+            amps.to_csv(three_up+'/amplitudes_by_distance_multiway')
         COUNTER += 1
         os.chdir(CWD)
         
 
+amps.to_csv('amplitudes_by_distance_multiway')
 COMM.Barrier()
 
 amps=amps*1000
@@ -407,17 +406,17 @@ for i, layer in enumerate(['L1', 'L23', 'L4', 'L5', 'L6']):
         axes[i].set_ylabel('Amplitude (uV)')
     #axes[i].set_xticks(np.arange(np.min(distances), np.max(distances), 5))
     axes[i].legend()
-fig3.savefig('amps_by_distance2',dpi=400)
+fig3.savefig('amplitudes_by_distance_multiway2',dpi=400)
 
 #plot amp by distance
 fig2 = plt.figure(figsize=(10, 8))
-plt.plot(distances, amps.values.T*1000)
+plt.plot(distances, amps.values.T)
 plt.plot(distances, [15]*n_electrodes, 'b--')
 plt.title('P2P amplitude measured from soma')
 plt.xlabel('Distance from soma (um)')
 plt.ylabel('Amplitude (uV)')
 plt.legend(list(amps.index)+['15uV treshold'])
-fig2.savefig('amps_by_distance',dpi=200)
+fig2.savefig('amplitudes_by_distance_multiway',dpi=200)
 plt.close(fig2)
 #gather sim output
 if SIZE > 1:
