@@ -2,17 +2,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-amps = pd.read_csv('amplitudes', index_col=0)
+amps = pd.read_csv('amplitudes_by_distance_multiway', index_col=0)
 amps = amps*1000
 n_electrodes=30
-distances = np.linspace(15, 100, n_electrodes)
-fig3 = plt.figure(figsize=(10, 8))
-fig3.suptitle('P2P amplitude measured from soma')
-ax1 = fig3.add_subplot(3, 2, 1)
-ax23 = fig3.add_subplot(3, 2, 2)
-ax4 = fig3.add_subplot(3, 2, 3)
-ax5 = fig3.add_subplot(3, 2, 4)
-ax6 = fig3.add_subplot(3, 2, 5)
+distances = np.linspace(8, 100, n_electrodes)
+fig = plt.figure(figsize=(10, 8))
+fig.suptitle('P2P amplitude measured from soma')
+ax1 = fig.add_subplot(3, 2, 1)
+ax23 = fig.add_subplot(3, 2, 2)
+ax4 = fig.add_subplot(3, 2, 3)
+ax5 = fig.add_subplot(3, 2, 4)
+ax6 = fig.add_subplot(3, 2, 5)
 axes = [ax1, ax23, ax4, ax5, ax6]
 for i, layer in enumerate(['L1', 'L23', 'L4', 'L5', 'L6']):
     L_df = amps[amps.index.str.startswith(layer)]
@@ -32,4 +32,18 @@ for i, layer in enumerate(['L1', 'L23', 'L4', 'L5', 'L6']):
     #axes[i].set_xticks(np.arange(np.min(distances), np.max(distances), 5))
     axes[i].legend()
 
-fig3.savefig('amps_by_distance2',dpi=400)
+fig.savefig('figures/amps_by_distance_multiway',dpi=400)
+
+fig2 = plt.figure(figsize=(10, 8))
+plt.title('P2P amplitude measured from soma')
+
+colors = ['g', 'b', 'r', 'y', 'm']
+for i, layer in enumerate(['L1', 'L23', 'L4', 'L5', 'L6']):
+    L_df = amps[amps.index.str.startswith(layer)]
+    for row in L_df.iterrows():
+        if 'PC' in row[0] or 'SS' in row[0]  or 'SP' in row[0] :
+            plt.plot(distances, row[1], colors[i])
+        else:
+            plt.plot(distances, row[1], colors[i], linestyle='dashed')
+
+fig2.savefig('figures/amps_by_distance_multiway2',dpi=400)
