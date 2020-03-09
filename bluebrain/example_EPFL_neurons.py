@@ -173,7 +173,7 @@ apply_filter = True
 #communication buffer where all simulation output will be gathered on RANK 0
 COMM_DICT = {}
 
-largest_soma_diam = 14.1402
+largest_soma_diam = 15.6597
 COUNTER = 0
 for i, NRN in enumerate(neurons):
     os.chdir(NRN)
@@ -246,8 +246,8 @@ for i, NRN in enumerate(neurons):
                                 idx = cell.get_closest_idx(z=0),
                                 **synapseParameters)
             synapse.set_spike_times(np.array([10]))
-
-            electrode = LFPy.RecExtElectrode(x = np.array([soma_diam/2+1]),
+            rec_spot = np.ceil(largest_soma_diam/2)
+            electrode = LFPy.RecExtElectrode(x = np.array([rec_spot]),
                                              y=np.zeros(1),
                                              z=np.zeros(1),
                                              sigma=0.3, r=5, n=50,
@@ -263,7 +263,7 @@ for i, NRN in enumerate(neurons):
                 LFP = ss.filtfilt(b, a, LFP, axis=-1)
             amps.loc[NRN[30:]] = [(np.max(LFP)-np.min(LFP)/2), soma_diam/2]
             three_up =  os.path.abspath(os.path.join(__file__ ,"../../.."))
-            amps.to_csv(three_up+'/amplitude_at_soma')
+            amps.to_csv(three_up+'/amplitude_at_{0}'.format(rec_spot))
             #detect action potentials from intracellular trace
             AP_train = np.zeros(cell.somav.size, dtype=int)
             crossings = (cell.somav[:-1] < threshold) & (cell.somav[1:] >= threshold)
