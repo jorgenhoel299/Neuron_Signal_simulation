@@ -17,7 +17,7 @@ from mpi4py import MPI
 
 csv_ready = True
 if csv_ready:
-    amps = pd.read_csv('opa')
+    amps = pd.read_csv('recordings/opa')
 else:
     # Load data
     amps = pd.read_csv('amplitudes_by_distance_multiway', index_col=0)
@@ -192,13 +192,42 @@ else:
 amps = amps.set_index('Unnamed: 0')
 fig = plt.figure(figsize=(10, 8))
 layers = ['L1', 'L23', 'L4', 'L5', 'L6']
-styles = ['ro', 'bo', 'co', 'go', 'yo']
+colors = ['g', 'b', 'r', 'y', 'm']
+all_ex_amp = []
+all_ex_rd = []
+all_in_amp = []
+all_in_rd = []
 for i, layer in enumerate(layers):
+    mean_rd_ex = []
+    mean_rd_in = []
+    mean_amp_ex = []
+    mean_amp_in = []
     L_df = amps[amps.index.str.startswith(layer)]
-    plt.plot(L_df['r/d'], L_df['8.0']*1000, styles[i], label=layer)
+    #plt.plot(L_df['r/d'], L_df['8.0']*1000, styles[i], label=layer)
+    models = [model[:-2] for model in L_df.index]
+    unique_models = list(dict.fromkeys(models))
+    for model in unique_models:
+        model_df = L_df[L_df.index.str.startswith(model)]
+        if 'PC' in model or 'SS' in model  or 'SP' in model:
+            all_ex_amp.append(model_df['8.0'].mean()*1000)
+            all_ex_rd.append(model_df['r/d'].mean())
+            mean_amp_ex.append(model_df['8.0'].mean()*1000)
+            mean_rd_ex.append(model_df['r/d'].mean())
+        else:
+            all_in_amp.append(model_df['8.0'].mean()*1000)
+            all_in_rd.append(model_df['r/d'].mean())
+            mean_amp_in.append(model_df['8.0'].mean()*1000)
+            mean_rd_in.append(model_df['r/d'].mean())
+    plt.plot(mean_rd_ex, mean_amp_ex, colors[i]+'o', label=layer+' excitatory')
+    plt.plot(mean_rd_in, mean_amp_in, colors[i]+'+', label=layer+' inhibitory')
 
 plt.title('Amplitudes at 8um')
-plt.xlabel('∑')
+plt.xlabel(r'$\frac{\Sigma d^{\frac{3}{2}}_{dend}}{r_{soma}}$', fontsize=15)
+#plt.axis.label.set_size(40)
 plt.ylabel('Amplitude uV')
+x = np.linspace(0, 5, 30)
+m, b = np.polyfit(all_ex_rd+all_in_rd, all_ex_amp+all_in_amp, 1)
+plt.plot(x, m*x+b, 'r--', label='{0:.2f}*x{1:.2f}'.format(m, b))
 plt.legend()
+
 plt.savefig('Amps_at_8um')
