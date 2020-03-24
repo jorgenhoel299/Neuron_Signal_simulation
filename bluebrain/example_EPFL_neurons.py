@@ -51,7 +51,17 @@ COMM = MPI.COMM_WORLD
 SIZE = COMM.Get_size()
 RANK = COMM.Get_rank()
 
-amps = pd.DataFrame(columns=['amplitude', 'r_soma'])
+# How to record: 
+# 'outside_cell_only', 'largest_soma_and_out' or 'outside_cell_and_out'
+record_mode = 'outside_cell_and_out'
+n_electrodes = 30 # Relevant only for 'largest_soma_and_out' and 'outside_cell_and_out'
+if record_mode == 'outside_cell_only':
+    amps = pd.DataFrame(columns=['amplitude', 'r_soma'])
+elif record_mode == 'largest_soma_and_out':
+    distances = np.linspace(8, 100, n_electrodes)
+    amps = pd.DataFrame(columns=distances)
+elif record_mode == 'outside_cell_and_out':
+    amps = pd.DataFrame(columns=['rec_spots']+list(range(n_electrodes)))
 
 #working dir
 CWD = os.getcwd()
@@ -221,6 +231,7 @@ for i, NRN in enumerate(neurons):
     for morphologyfile in glob(os.path.join('morphology', '*')):
         if COUNTER % SIZE == RANK:
             # Instantiate the cell(s) using LFPy
+            three_up =  os.path.abspath(os.path.join(__file__ ,"../../.."))
             cell = LFPy.TemplateCell(morphology=morphologyfile,
                              templatefile=posixpth(os.path.join(NRN, 'template.hoc')),
                              templatename=templatename,
@@ -246,50 +257,73 @@ for i, NRN in enumerate(neurons):
                                 idx = cell.get_closest_idx(z=0),
                                 **synapseParameters)
             synapse.set_spike_times(np.array([10]))
-            rec_spot = np.ceil(largest_soma_diam/2)
-            electrode = LFPy.RecExtElectrode(x = np.array([rec_spot]),
-                                             y=np.zeros(1),
-                                             z=np.zeros(1),
-                                             sigma=0.3, r=5, n=50,
-                                             N=np.array([[1, 0, 0], [1, 0, 0]]),
-                                             method='soma_as_point')
+            if record_mode == 'outside_cell_only':
+                rec_spot = soma_diam/2+1
+                electrode = LFPy.RecExtElectrode(x = np.array([rec_spot, -rec_spot, 0, 0]),
+                                                y = np.array([0, 0, rec_spot, -rec_spot]),
+                                                z=np.zeros(4),
+                                                sigma=0.3, r=5, n=50,
+                                                N=np.array([[1, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]]),
+                                                method='soma_as_point')
+                
+                #run simulation
+                cell.simulate(electrode=electrode)
+        
+                #electrode.calc_lfp()
+                LFP = electrode.LFP
+                if apply_filter:
+                    LFP = ss.filtfilt(b, a, LFP, axis=-1)
+                amps.loc[NRN[30:]] = [np.mean(LFP.max(axis=1)-LFP.min(axis=1))/2, soma_diam/2]
+                
+                amps.to_csv(three_up+'/amplitude_1um_outside_soma')
             
-            #run simulation
-            cell.simulate(electrode=electrode)
-    
-            #electrode.calc_lfp()
-            LFP = electrode.LFP
-            if apply_filter:
-                LFP = ss.filtfilt(b, a, LFP, axis=-1)
-            amps.loc[NRN[30:]] = [(np.max(LFP)-np.min(LFP)/2), soma_diam/2]
-            three_up =  os.path.abspath(os.path.join(__file__ ,"../../.."))
-            amps.to_csv(three_up+'/amplitude_at_{0}'.format(rec_spot))
-            #detect action potentials from intracellular trace
-            AP_train = np.zeros(cell.somav.size, dtype=int)
-            crossings = (cell.somav[:-1] < threshold) & (cell.somav[1:] >= threshold)
-            spike_inds = np.where(crossings)[0]
-            #sampled spike waveforms for each event
-            spw = np.zeros((crossings.sum()*LFP.shape[0], 2*samplelength))
-            tspw = np.arange(-samplelength, samplelength)*dt
-            #set spike time where voltage gradient is largest
-            n = 0 #counter
-            for j, i in enumerate(spike_inds):
-                inds = np.arange(i - samplelength, i + samplelength)
-                w = cell.somav[inds]
-                k = inds[:-1][np.diff(w) == np.diff(w).max()][0]
-                AP_train[k] = 1
-                #sample spike waveform
-                for l in LFP:               
-                    spw[n, ] = l[np.arange(k - samplelength, k + samplelength)]
-                    n += 1
-                    
-            #fill in sampled spike waveforms and times of spikes in comm_dict
-            COMM_DICT.update({
-                os.path.split(NRN)[-1] + '_' + os.path.split(morphologyfile)[-1].strip('.asc') : dict(
-                    spw = spw,
-                )
-            })
-                    
+            elif record_mode == 'largest_soma_and_out':
+                distances = np.linspace(8, 100, n_electrodes)
+                electrode = LFPy.RecExtElectrode(x=np.concatenate([distances, -distances, np.zeros(n_electrodes*2)]),
+                                                y=np.concatenate([np.zeros(n_electrodes*2), distances, -distances]),
+                                                z=np.zeros(n_electrodes*4),
+                                                sigma=0.3, r=5, n=50,
+                                                N=np.array([[1, 0, 0]]*2*n_electrodes+[[0, 1, 0]]*2*n_electrodes),
+                                                method='soma_as_point')
+                #run simulation
+                cell.simulate(electrode=electrode)
+        
+                #electrode.calc_lfp()
+                LFP = electrode.LFP
+                if apply_filter:
+                    LFP = ss.filtfilt(b, a, LFP, axis=-1)
+                
+                amp = np.empty(n_electrodes)
+                for i in range(n_electrodes):
+                    amp[i] = ((LFP[i, :].max()-LFP[i, :].min())/2 + (LFP[n_electrodes+i, :].max()-LFP[n_electrodes + i, :].min())/2 
+                    + (LFP[2*n_electrodes+i, :].max()-LFP[2*n_electrodes+i, :].min())/2 + (LFP[3*n_electrodes+i, :].max()-LFP[3*n_electrodes+i, :].min())/2)/4
+                amps.loc[NRN[30:]] = amp
+                amps.to_csv(three_up+'/amplitude_from_8um_outside_soma_center')
+            elif record_mode == 'outside_cell_and_out':
+                distances = np.linspace(soma_diam/2+1, 100, n_electrodes)
+                electrode = LFPy.RecExtElectrode(x=np.concatenate([distances, -distances, np.zeros(n_electrodes*2)]),
+                                                y=np.concatenate([np.zeros(n_electrodes*2), distances, -distances]),
+                                                z=np.zeros(n_electrodes*4),
+                                                sigma=0.3, r=5, n=50,
+                                                N=np.array([[1, 0, 0]]*2*n_electrodes+[[0, 1, 0]]*2*n_electrodes),
+                                                method='soma_as_point')
+                #run simulation
+                cell.simulate(electrode=electrode)
+        
+                #electrode.calc_lfp()
+                LFP = electrode.LFP
+                if apply_filter:
+                    LFP = ss.filtfilt(b, a, LFP, axis=-1)
+                
+                amp = np.empty(n_electrodes)
+                for i in range(n_electrodes):
+                    amp[i] = ((LFP[i, :].max()-LFP[i, :].min())/2 + (LFP[n_electrodes+i, :].max()-LFP[n_electrodes + i, :].min())/2 
+                    + (LFP[2*n_electrodes+i, :].max()-LFP[2*n_electrodes+i, :].min())/2 + (LFP[3*n_electrodes+i, :].max()-LFP[3*n_electrodes+i, :].min())/2)/4
+                amps.loc[NRN[30:]] = [list(distances)]+list(amp)
+                amps.to_csv(three_up+'/multiway_amplitude_from_1um_outside_soma')
+
+            else:
+                raise(KeyError)      
         COUNTER += 1
         os.chdir(CWD)
         

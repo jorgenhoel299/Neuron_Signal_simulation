@@ -47,13 +47,46 @@ plt.rcParams.update({
     'ytick.labelsize' : 8,
     'xtick.labelsize' : 8,
 })
-control_simulation = True
+control_simulation = False
 COMM = MPI.COMM_WORLD
 SIZE = COMM.Get_size()
 RANK = COMM.Get_rank()
 
-amps = pd.DataFrame(columns=['amplitude', 'r_soma'])
 
+
+# How to record: 
+# 'outside_cell_only', 'largest_soma_and_out' or 'outside_cell_and_out'
+record_mode = 'outside_cell_and_out'    
+n_electrodes = 30 # Relevant only for 'largest_soma_and_out' and 'outside_cell_and_out'
+
+if record_mode == 'outside_cell_only':
+    compl_nrn_name = '/previously_completed_neurons_only_1um.txt'
+    if os.path.exists("vclamp_amplitude_1um_outside_soma"):
+        amps = pd.read_csv("vclamp_amplitude_1um_outside_soma", index_col=0)
+    else:
+        amps = pd.DataFrame(columns=['amplitude', 'r_soma'])
+elif record_mode == 'largest_soma_and_out':
+    distances = np.linspace(8, 100, n_electrodes)
+    compl_nrn_name = '/previously_completed_neurons_8um.txt'
+    if os.path.exists("vclamp_amplitude_from_8um_outside_soma_center"):
+        amps = pd.read_csv("vclamp_amplitude_from_8um_outside_soma_center", index_col=0)
+    else:
+        amps = pd.DataFrame(columns=distances)
+elif record_mode == 'outside_cell_and_out':
+    compl_nrn_name = '/previously_completed_neurons_1um.txt'
+    if os.path.exists("vclamp_amplitude_from_1um_outside_soma"):
+        amps = pd.read_csv("vclamp_amplitude_from_1um_outside_soma", index_col=0)
+    else:
+        amps = pd.DataFrame(columns=['rec_spots']+list(range(n_electrodes)))
+
+completed_neurons = []
+prev_completed_neurons = []
+if os.path.exists(compl_nrn_name[1:]):
+    with open(compl_nrn_name[1:], "r") as f:
+        for line in f:
+            prev_completed_neurons.append(line.strip())
+if not os.path.isdir('figures'):
+    os.mkdir('figures')
 #working dir
 CWD = os.getcwd()
 NMODL = 'hoc_combos_syn.1_0_10.allmods'
@@ -63,11 +96,7 @@ neuron.h.load_file("stdrun.hoc")
 neuron.h.load_file("import3d.hoc")
 
 #load only some layer 5 pyramidal cell types
-neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5*'))
-# neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_TTPC*'))[:1]
-# neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_MC*'))[:1]
-# neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_LBC*'))[:1]
-# neurons += glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L5_NBC*'))[:1]
+neurons = glob(os.path.join('hoc_combos_syn.1_0_10.allzips', 'L*'))
 
 #flag for cell template file to switch on (inactive) synapses
 add_synapses = False
@@ -157,7 +186,7 @@ def remove_mechanisms(remove_list=None):
             for mech in remove_list:
                 mt.select(mech)
                 mt.remove()
-# PARAMETERS
+
 
 #sim duration
 tstop = 10.
@@ -188,9 +217,13 @@ COMM_DICT = {}
 
 largest_soma_diam = 15.6597
 COUNTER = 0
-for i, NRN in enumerate(neurons):
-    os.chdir(NRN)
 
+for i, NRN in enumerate(neurons):
+    if NRN[30:] in prev_completed_neurons:
+        print(2)
+        continue
+    os.chdir(NRN)
+    
     #get the template name
     f = open("template.hoc", 'r')
     templatename = get_templatename(f)
@@ -235,109 +268,178 @@ for i, NRN in enumerate(neurons):
         if COUNTER % SIZE == RANK:
             two_up =  os.path.abspath(os.path.join(__file__ ,"../../../"))
             # Instantiate the cell(s) using LFPy
-            cell = LFPy.TemplateCell(morphology=morphologyfile,
-                             templatefile=posixpth(os.path.join(NRN, 'template.hoc')),
-                             templatename=templatename,
-                             templateargs=1 if add_synapses else 0,
-                             v_init=-75,
-                             tstart=-200,
-                             tstop=tstop,
-                             dt=dt,
-                             nsegs_method=None)
+            try:
+                cell = LFPy.TemplateCell(morphology=morphologyfile,
+                                templatefile=posixpth(os.path.join(NRN, 'template.hoc')),
+                                templatename=templatename,
+                                templateargs=1 if add_synapses else 0,
+                                v_init=-75,
+                                tstart=-200,
+                                tstop=tstop,
+                                dt=dt,
+                                nsegs_method=None)
 
-            if control_simulation:
-                #h("soma[0] {insert hh}")
-                synapse_parameters = {
-                    'idx' : 0,
-                    'e' : 0.,                   # reversal potential
-                    'syntype' : 'ExpSyn',       # synapse type
-                    'tau' : 5.,                 # synaptic time constant
-                    'weight' : .05,            # synaptic weight
-                    'record_current' : False,    # record synapse current
-                }
+                if control_simulation:
+                    #h("soma[0] {insert hh}")
+                    synapse_parameters = {
+                        'idx' : 0,
+                        'e' : 0.,                   # reversal potential
+                        'syntype' : 'ExpSyn',       # synapse type
+                        'tau' : 5.,                 # synaptic time constant
+                        'weight' : .05,            # synaptic weight
+                        'record_current' : False,    # record synapse current
+                    }
 
-                # Create synapse and set time of synaptic input
-                synapse = LFPy.Synapse(cell, **synapse_parameters)
-                synapse.set_spike_times(np.array([2.]))
-            else:
-                i=0
-                remove_mechanisms()
-                # for seg in cell.allseclist:
-                #     if i == 0:
-                #         vclamp = h.SEClamp_i(seg(0.5))
-                #     i+=1
-                for sec in h.allsec():
+                    # Create synapse and set time of synaptic input
+                    synapse = LFPy.Synapse(cell, **synapse_parameters)
+                    synapse.set_spike_times(np.array([2.]))
+                else:
+                    i=0
+                    remove_mechanisms()
+                    # for seg in cell.allseclist:
+                    #     if i == 0:
+                    #         vclamp = h.SEClamp_i(seg(0.5))
+                    #     i+=1
+                    for sec in h.allsec():
 
-                    vclamp = h.SEClamp_i(sec(0.5))
-                    break
+                        vclamp = h.SEClamp_i(sec(0.5))
+                        break
+                    
+                    vclamp.dur1 = 1e9
+                    # vclamp.amp1 = -75
+                    # vclamp.dur2 = 2
+                    # vclamp.amp2 = -80
+                    vclamp.rs = .01
+                    vmem_to_insert = h.Vector(np.load(two_up+'/'+"L5_TTPC1_cADpyr232_1_soma_spike.npy"))
+                    # vmem_to_insert = h.Vector(np.array([-65]*1000))
+                    vmem_to_insert.play(vclamp._ref_amp1, h.dt)
                 
-                vclamp.dur1 = 1e9
-                # vclamp.amp1 = -75
-                # vclamp.dur2 = 2
-                # vclamp.amp2 = -80
-                vclamp.rs = .01
-                vmem_to_insert = h.Vector(np.load(two_up+'/'+NRN[30:]+"_soma_spike.npy"))
-                # vmem_to_insert = h.Vector(np.array([-65]*1000))
-                vmem_to_insert.play(vclamp._ref_amp1, h.dt)
+                cell.set_rotation(x=np.pi/2)
+                i=0
+                for seg in cell.allseclist:
+                    if i == 0:
+                        soma_diam = seg.diam
+                    i+=1
+                if record_mode == 'outside_cell_only':
+                    rec_spot = soma_diam/2+1
+                    electrode = LFPy.RecExtElectrode(x = np.array([rec_spot, -rec_spot, 0, 0]),
+                                                    y = np.array([0, 0, rec_spot, -rec_spot]),
+                                                    z=np.zeros(4),
+                                                    sigma=0.3, r=5, n=50,
+                                                    N=np.array([[1, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]]),
+                                                    method='soma_as_point')
+                    
+                    #run simulation
+                    cell.simulate(electrode=electrode)
             
-            cell.set_rotation(x=np.pi/2)
-            i=0
-            for seg in cell.allseclist:
-                if i == 0:
-                    soma_diam = seg.diam
-                i+=1
-            rec_spot = np.ceil(largest_soma_diam/2)
-            x = np.linspace(25, 55, 4)
-            y = np.zeros(x.shape)
-            z = np.zeros(x.shape)
-            # Define electrode parameters
-            elec_params = {
-                'sigma' : 0.3,      # extracellular conductivity
-                'x' : x,  # electrode requires 1d vector of positions
-                'y' : y,
-                'z' : z,
-                'method': 'soma_as_point'
-            }
-            elec_clr = lambda idx: plt.cm.viridis(idx / (len(x)))
-            electrode = LFPy.RecExtElectrode(**elec_params)
-            cell.simulate(electrode=electrode)
+                    #electrode.calc_lfp()
+                    LFP = electrode.LFP
+                    if apply_filter:
+                        LFP = ss.filtfilt(b, a, LFP, axis=-1)
+                    
+                    amps.loc[NRN[30:]] = [np.mean(LFP.max(axis=1)-LFP.min(axis=1))/2, soma_diam/2]
+                    
+                    amps.to_csv(two_up+'/v_clamp_amplitude_1um_outside_soma')
 
-            plt.close("all")
+                elif record_mode == 'largest_soma_and_out':
+                    
+                    electrode = LFPy.RecExtElectrode(x=np.concatenate([distances, -distances, np.zeros(n_electrodes*2)]),
+                                                    y=np.concatenate([np.zeros(n_electrodes*2), distances, -distances]),
+                                                    z=np.zeros(n_electrodes*4),
+                                                    sigma=0.3, r=5, n=50,
+                                                    N=np.array([[1, 0, 0]]*2*n_electrodes+[[0, 1, 0]]*2*n_electrodes),
+                                                    method='soma_as_point')
+                    cell.simulate(electrode=electrode)
+                    LFP = electrode.LFP
+                    if apply_filter:
+                        LFP = ss.filtfilt(b, a, LFP, axis=-1)
+                    amp = np.empty(n_electrodes)
+                    for i in range(n_electrodes):
+                        amp[i] = ((LFP[i, :].max()-LFP[i, :].min())/2 + (LFP[n_electrodes+i, :].max()-LFP[n_electrodes + i, :].min())/2 
+                        + (LFP[2*n_electrodes+i, :].max()-LFP[2*n_electrodes+i, :].min())/2 + (LFP[3*n_electrodes+i, :].max()-LFP[3*n_electrodes+i, :].min())/2)/4
+                    
+                    amps.loc[NRN[30:]] = amp
+                    amps.to_csv(two_up+'/vclamp_amplitude_from_8um_outside_soma_center')
+
+
+                elif record_mode == 'outside_cell_and_out':
+                    distances = np.linspace(soma_diam/2+1, 100, n_electrodes)
+                    electrode = LFPy.RecExtElectrode(x=np.concatenate([distances, -distances, np.zeros(n_electrodes*2)]),
+                                                    y=np.concatenate([np.zeros(n_electrodes*2), distances, -distances]),
+                                                    z=np.zeros(n_electrodes*4),
+                                                    sigma=0.3, r=5, n=50,
+                                                    N=np.array([[1, 0, 0]]*2*n_electrodes+[[0, 1, 0]]*2*n_electrodes),
+                                                    method='soma_as_point')
+                    
+                    #run simulation
+                    cell.simulate(electrode=electrode)
             
-            fig = plt.figure(figsize=[9, 9])
+                    #electrode.calc_lfp()
+                    LFP = electrode.LFP
+                    if apply_filter:
+                        LFP = ss.filtfilt(b, a, LFP, axis=-1)
+                    
+                    amp = np.empty(n_electrodes)
+                    for i in range(n_electrodes):
+                        amp[i] = ((LFP[i, :].max()-LFP[i, :].min())/2 + (LFP[n_electrodes+i, :].max()-LFP[n_electrodes + i, :].min())/2 
+                        + (LFP[2*n_electrodes+i, :].max()-LFP[2*n_electrodes+i, :].min())/2 + (LFP[3*n_electrodes+i, :].max()-LFP[3*n_electrodes+i, :].min())/2)/4
+                    amps.loc[NRN[30:]] = [list(distances)]+list(amp)
+                    
+                    amps.to_csv(two_up+'/vclamp_amplitude_from_1um_outside_soma')
+                else:
+                    raise(ValueError)
+                
+                x = np.linspace(25, 55, 4)
+                y = np.zeros(x.shape)
+                z = np.zeros(x.shape)
+                # Define electrode parameters
+                
+                elec_clr = lambda idx: plt.cm.viridis(idx / (len(x)))
+                
+                cell.simulate(electrode=electrode)
+                
+                
+                plt.close("all")
+                fig = plt.figure(figsize=[9, 9])
 
-            ax_m = fig.add_subplot(121, frameon=False, aspect=1, xlim=[-200, 200])
+                ax_m = fig.add_subplot(121, frameon=False, aspect=1, xlim=[-200, 200])
 
-            ax1 = fig.add_subplot(222, xlabel="time (ms)", ylabel="mV", title="somatic Vm")
-            ax3 = fig.add_subplot(224, xlabel="time (ms)", ylabel="$\mu$V", title="extracellular potential")
+                ax1 = fig.add_subplot(222, xlabel="time (ms)", ylabel="mV", title="somatic Vm")
+                ax3 = fig.add_subplot(224, xlabel="time (ms)", ylabel="$\mu$V", title="extracellular potential")
 
-            [ax_m.plot([cell.xstart[i], cell.xend[i]], [cell.zstart[i], cell.zend[i]], c='k', lw=cell.diam[i]) for i in range(cell.totnsegs)]
+                [ax_m.plot([cell.xstart[i], cell.xend[i]], [cell.zstart[i], cell.zend[i]], c='k', lw=cell.diam[i]) for i in range(cell.totnsegs)]
 
-            peak2peaks = np.zeros(len(x))
-            for e_idx in range(len(x)):
-                ax_m.plot(electrode.x[e_idx], electrode.z[e_idx], 'o', c=elec_clr(e_idx))
-                ax3.plot(cell.tvec, 1000 * electrode.LFP[e_idx], c=elec_clr(e_idx))
+                peak2peaks = np.zeros(len(x))
+                for e_idx in range(len(x)):
+                    ax_m.plot(electrode.x[e_idx], electrode.z[e_idx], 'o', c=elec_clr(e_idx))
+                    ax3.plot(cell.tvec, 1000 * electrode.LFP[e_idx], c=elec_clr(e_idx))
 
-                peak2peaks[e_idx] = 1000 * (np.max(electrode.LFP[e_idx]) - np.min(electrode.LFP[e_idx]))
-                ax3.plot([cell.tvec[-1] - 1, cell.tvec[-1] - 1], [1000 * np.min(electrode.LFP[e_idx]),
-                                                                1000 * np.max(electrode.LFP[e_idx])], c=elec_clr(e_idx))
+                    peak2peaks[e_idx] = 1000 * (np.max(electrode.LFP[e_idx]) - np.min(electrode.LFP[e_idx]))
+                    ax3.plot([cell.tvec[-1] - 1, cell.tvec[-1] - 1], [1000 * np.min(electrode.LFP[e_idx]),
+                                                                    1000 * np.max(electrode.LFP[e_idx])], c=elec_clr(e_idx))
 
-            ax1.plot(cell.tvec, cell.somav)
-
+                ax1.plot(cell.tvec, cell.somav)
+                completed_neurons.append(NRN[30:])
+            except:
+                if len(prev_completed_neurons) == 0:
+                    with open(two_up+compl_nrn_name, "w") as f:
+                        for n in completed_neurons:
+                            f.write(str(n) + "\n")
+                else:
+                    with open(two_up+compl_nrn_name, "a") as f:
+                        for n in completed_neurons:
+                            f.write(str(n) + "\n")
+                raise SystemExit(0)
             if control_simulation:
-                print(NRN[30:])
                 np.save(two_up+'/'+NRN[30:]+"_soma_spike.npy", cell.somav)
 
-                plt.savefig(two_up+'/'+"vclamp_control_on_{}".format(NRN[30:]), format='png')
+                plt.savefig(two_up+'/figures/'+"vclamp_control_on_{}".format(NRN[30:]), format='png')
             else:
-                plt.savefig(two_up+'/'+"vclamp_test on {}".format(NRN[30:]))
+                plt.savefig(two_up+'/figures/'+"vclamp_test on {}".format(NRN[30:]))
             #electrode.calc_lfp()
-            LFP = electrode.LFP
-            if apply_filter:
-                LFP = ss.filtfilt(b, a, LFP, axis=-1)
+            
                     
         COUNTER += 1
         os.chdir(CWD)
-        
 
 COMM.Barrier()
