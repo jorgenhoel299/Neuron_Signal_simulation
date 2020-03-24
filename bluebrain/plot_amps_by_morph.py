@@ -17,10 +17,10 @@ from mpi4py import MPI
 
 csv_ready = True
 if csv_ready:
-    amps = pd.read_csv('recordings/opa')
+    amps = pd.read_csv('vclamp_opa_1nout')
 else:
     # Load data
-    amps = pd.read_csv('amplitudes_by_distance_multiway', index_col=0)
+    amps = pd.read_csv('vclamp/vclamp_amplitude_from_1um_outside_soma', index_col=0)
     amps['r/d'] = ""
 
     # Load cells and determine morpholgy parameters
@@ -184,12 +184,12 @@ else:
                 
                 value = np.sum(np.array(dend_diams)**1.5)/r_soma
                 amps.at[NRN[30:], 'r/d'] = value
-            amps.to_csv('../opa')
+            amps.to_csv('../vclamp_opa_1nout')
             COUNTER += 1
             os.chdir(CWD)
     amps.to_csv('opa')
-
-amps = amps.set_index('Unnamed: 0')
+if csv_ready:
+    amps = amps.set_index('Unnamed: 0')
 fig = plt.figure(figsize=(10, 8))
 layers = ['L1', 'L23', 'L4', 'L5', 'L6']
 colors = ['g', 'b', 'r', 'y', 'm']
@@ -209,25 +209,27 @@ for i, layer in enumerate(layers):
     for model in unique_models:
         model_df = L_df[L_df.index.str.startswith(model)]
         if 'PC' in model or 'SS' in model  or 'SP' in model:
-            all_ex_amp.append(model_df['8.0'].mean()*1000)
+            all_ex_amp.append(model_df['0'].mean()*1000)
             all_ex_rd.append(model_df['r/d'].mean())
-            mean_amp_ex.append(model_df['8.0'].mean()*1000)
+            mean_amp_ex.append(model_df['0'].mean()*1000)
             mean_rd_ex.append(model_df['r/d'].mean())
         else:
-            all_in_amp.append(model_df['8.0'].mean()*1000)
+            all_in_amp.append(model_df['0'].mean()*1000)
             all_in_rd.append(model_df['r/d'].mean())
-            mean_amp_in.append(model_df['8.0'].mean()*1000)
+            mean_amp_in.append(model_df['0'].mean()*1000)
             mean_rd_in.append(model_df['r/d'].mean())
-    plt.plot(mean_rd_ex, mean_amp_ex, colors[i]+'o', label=layer+' excitatory')
-    plt.plot(mean_rd_in, mean_amp_in, colors[i]+'+', label=layer+' inhibitory')
+    #plt.plot(mean_rd_in, mean_amp_in, colors[i]+'+', label=layer)#+' inhibitory')
+    if layer == 'L1':
+        continue
+    plt.plot(mean_rd_ex, mean_amp_ex, colors[i]+'o', label=layer)#+' excitatory')
 
-plt.title('Amplitudes at 8um')
+plt.title('Excitatory amplitudes at 1um outside cell, vclamp')
 plt.xlabel(r'$\frac{\Sigma d^{\frac{3}{2}}_{dend}}{r_{soma}}$', fontsize=15)
 #plt.axis.label.set_size(40)
 plt.ylabel('Amplitude uV')
-x = np.linspace(0, 5, 30)
-m, b = np.polyfit(all_ex_rd+all_in_rd, all_ex_amp+all_in_amp, 1)
+x = np.linspace(1.5, 5, 30)
+m, b = np.polyfit(all_ex_rd, all_ex_amp, 1)
 plt.plot(x, m*x+b, 'r--', label='{0:.2f}*x{1:.2f}'.format(m, b))
 plt.legend()
 
-plt.savefig('Amps_at_8um')
+plt.savefig('vclamp_excit_all_amps_at_1um')

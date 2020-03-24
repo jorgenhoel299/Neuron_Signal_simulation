@@ -2,12 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-amps = pd.read_csv('recordings/amplitudes_by_distance_multiway', index_col=0)
+amps = pd.read_csv('vclamp/vclamp_amplitudes_by_distance_multiway', index_col=0)
 amps = amps*1000
 n_electrodes=30
 distances = np.linspace(8, 100, n_electrodes)
 fig = plt.figure(figsize=(10, 8))
-fig.suptitle('P2P amplitude measured from soma')
+fig.suptitle('V_clamp P2P amplitude measured from soma')
 ax1 = fig.add_subplot(3, 2, 1)
 ax23 = fig.add_subplot(3, 2, 2)
 ax4 = fig.add_subplot(3, 2, 3)
@@ -34,10 +34,10 @@ for i, layer in enumerate(['L1', 'L23', 'L4', 'L5', 'L6']):
     axes[i].set_xticks(np.arange(np.min(distances), np.max(distances), 5))
     axes[i].legend()
 
-fig.savefig('figures/amps_by_distance_multiway_onlysmall',dpi=400)
+fig.savefig('vclamp_amps_by_distance_multiway_onlysmall',dpi=400)
 
 fig2 = plt.figure(figsize=(10, 8))
-plt.title('P2P amplitude by recording distance')
+plt.title('V_clamp P2P amplitude by recording distance')
 
 colors = ['g', 'b', 'r', 'y', 'm']
 for k, layer in enumerate(['L1', 'L23', 'L4', 'L5', 'L6']):
@@ -52,10 +52,12 @@ for k, layer in enumerate(['L1', 'L23', 'L4', 'L5', 'L6']):
         else:
             j += 1
             in_cells = np.add(in_cells, row[1])
-    plt.plot(distances, ex_cells/i, color=colors[k], label=layer + ' excitatory')
     plt.plot(distances, in_cells/j, color=colors[k], linestyle='dashed', label=layer +' inhibitory')
+    if layer == 'L1':
+        continue
+    plt.plot(distances, ex_cells/i, color=colors[k], label=layer + ' excitatory')
 plt.plot(distances, [15]*n_electrodes, 'k--', label='15uV treshold')
 plt.legend()
 plt.xlabel('Distance from soma center [um]')
 plt.ylabel('Amplitude [uV]')
-fig2.savefig('figures/amps_by_distance_multiway_averages',dpi=400)
+fig2.savefig('vclamp_amps_by_distance_multiway_averages',dpi=400)
