@@ -57,7 +57,7 @@ RANK = COMM.Get_rank()
 # How to record: 
 # 'outside_cell_only', 'largest_soma_and_out' or 'outside_cell_and_out'
 record_mode = 'outside_cell_and_out'    
-n_electrodes = 30 # Relevant only for 'largest_soma_and_out' and 'outside_cell_and_out'
+n_electrodes = 70 # Relevant only for 'largest_soma_and_out' and 'outside_cell_and_out'
 
 if record_mode == 'outside_cell_only':
     compl_nrn_name = '/previously_completed_neurons_only_1um.txt'
@@ -74,8 +74,8 @@ elif record_mode == 'largest_soma_and_out':
         amps = pd.DataFrame(columns=distances)
 elif record_mode == 'outside_cell_and_out':
     compl_nrn_name = '/previously_completed_neurons_1um.txt'
-    if os.path.exists("vclamp_amplitude_from_1um_outside_soma"):
-        amps = pd.read_csv("vclamp_amplitude_from_1um_outside_soma", index_col=0)
+    if os.path.exists("vclamp_amplitude_from_1um_to_70_outside_soma"):
+        amps = pd.read_csv("vclamp_amplitude_from_1um_to_70_outside_soma", index_col=0)
     else:
         amps = pd.DataFrame(columns=['rec_spots']+list(range(n_electrodes)))
 
@@ -363,7 +363,7 @@ for i, NRN in enumerate(neurons):
 
 
                 elif record_mode == 'outside_cell_and_out':
-                    distances = np.linspace(soma_diam/2+1, 100, n_electrodes)
+                    distances = np.linspace(soma_diam/2+1, 70, n_electrodes)
                     electrode = LFPy.RecExtElectrode(x=np.concatenate([distances, -distances, np.zeros(n_electrodes*2)]),
                                                     y=np.concatenate([np.zeros(n_electrodes*2), distances, -distances]),
                                                     z=np.zeros(n_electrodes*4),
@@ -385,7 +385,7 @@ for i, NRN in enumerate(neurons):
                         + (LFP[2*n_electrodes+i, :].max()-LFP[2*n_electrodes+i, :].min())/2 + (LFP[3*n_electrodes+i, :].max()-LFP[3*n_electrodes+i, :].min())/2)/4
                     amps.loc[NRN[30:]] = [list(distances)]+list(amp)
                     
-                    amps.to_csv(two_up+'/vclamp_amplitude_from_1um_outside_soma')
+                    amps.to_csv(two_up+'/vclamp_amplitude_from_1um_to_70_outside_soma')
                 else:
                     raise(ValueError)
                 

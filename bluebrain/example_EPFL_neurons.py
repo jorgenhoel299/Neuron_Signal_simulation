@@ -54,7 +54,7 @@ RANK = COMM.Get_rank()
 # How to record: 
 # 'outside_cell_only', 'largest_soma_and_out' or 'outside_cell_and_out'
 record_mode = 'outside_cell_and_out'
-n_electrodes = 30 # Relevant only for 'largest_soma_and_out' and 'outside_cell_and_out'
+n_electrodes = 70 # Relevant only for 'largest_soma_and_out' and 'outside_cell_and_out'
 if record_mode == 'outside_cell_only':
     amps = pd.DataFrame(columns=['amplitude', 'r_soma'])
 elif record_mode == 'largest_soma_and_out':
@@ -300,7 +300,7 @@ for i, NRN in enumerate(neurons):
                 amps.loc[NRN[30:]] = amp
                 amps.to_csv(three_up+'/amplitude_from_8um_outside_soma_center')
             elif record_mode == 'outside_cell_and_out':
-                distances = np.linspace(soma_diam/2+1, 100, n_electrodes)
+                distances = np.linspace(soma_diam/2+1, 70, n_electrodes)
                 electrode = LFPy.RecExtElectrode(x=np.concatenate([distances, -distances, np.zeros(n_electrodes*2)]),
                                                 y=np.concatenate([np.zeros(n_electrodes*2), distances, -distances]),
                                                 z=np.zeros(n_electrodes*4),
@@ -320,7 +320,7 @@ for i, NRN in enumerate(neurons):
                     amp[i] = ((LFP[i, :].max()-LFP[i, :].min())/2 + (LFP[n_electrodes+i, :].max()-LFP[n_electrodes + i, :].min())/2 
                     + (LFP[2*n_electrodes+i, :].max()-LFP[2*n_electrodes+i, :].min())/2 + (LFP[3*n_electrodes+i, :].max()-LFP[3*n_electrodes+i, :].min())/2)/4
                 amps.loc[NRN[30:]] = [list(distances)]+list(amp)
-                amps.to_csv(three_up+'/multiway_amplitude_from_1um_outside_soma')
+                amps.to_csv(three_up+'/multiway_amplitude_from_1um_to_70_outside_soma')
 
             else:
                 raise(KeyError)      
