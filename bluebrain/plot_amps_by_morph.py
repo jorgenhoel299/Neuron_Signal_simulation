@@ -15,9 +15,10 @@ import neuron
 import LFPy
 from mpi4py import MPI
 
+split_in_5 = True
 csv_ready = True
 if csv_ready:
-    amps = pd.read_csv('vclamp_opa_1nout')
+    amps = pd.read_csv('vclamp/recordings/vclamp_opa_1nout')
 else:
     # Load data
     amps = pd.read_csv('vclamp/vclamp_amplitude_from_1um_outside_soma', index_col=0)
@@ -197,39 +198,68 @@ all_ex_amp = []
 all_ex_rd = []
 all_in_amp = []
 all_in_rd = []
-for i, layer in enumerate(layers):
-    mean_rd_ex = []
-    mean_rd_in = []
-    mean_amp_ex = []
-    mean_amp_in = []
-    L_df = amps[amps.index.str.startswith(layer)]
-    #plt.plot(L_df['r/d'], L_df['8.0']*1000, styles[i], label=layer)
-    models = [model[:-2] for model in L_df.index]
-    unique_models = list(dict.fromkeys(models))
-    for model in unique_models:
-        model_df = L_df[L_df.index.str.startswith(model)]
-        if 'PC' in model or 'SS' in model  or 'SP' in model:
-            all_ex_amp.append(model_df['0'].mean()*1000)
-            all_ex_rd.append(model_df['r/d'].mean())
-            mean_amp_ex.append(model_df['0'].mean()*1000)
-            mean_rd_ex.append(model_df['r/d'].mean())
-        else:
-            all_in_amp.append(model_df['0'].mean()*1000)
-            all_in_rd.append(model_df['r/d'].mean())
-            mean_amp_in.append(model_df['0'].mean()*1000)
-            mean_rd_in.append(model_df['r/d'].mean())
-    #plt.plot(mean_rd_in, mean_amp_in, colors[i]+'+', label=layer)#+' inhibitory')
-    if layer == 'L1':
-        continue
-    plt.plot(mean_rd_ex, mean_amp_ex, colors[i]+'o', label=layer)#+' excitatory')
+if split_in_5:
+    for i, layer in enumerate(layers):
+        ex_amp = []
+        in_amp = []
+        ex_rd = []
+        in_rd = []
+        L_df = amps[amps.index.str.startswith(layer)]
+        models = [model for model in L_df.index]
+        
+        for model in models:
+            model_df = L_df[L_df.index.str.startswith(model)]
+            amp = model_df['0'].values[0]*1000
+            rd = model_df['r/d'].values[0]
+            if 'PC' in model or 'SS' in model  or 'SP' in model:
+                all_ex_amp.append(amp)
+                ex_amp.append(amp)
+                all_ex_rd.append(rd)
+                ex_rd.append(rd)
+                
+            else:
+                all_in_amp.append(amp)
+                in_amp.append(amp)
+                all_in_rd.append(rd)
+                in_rd.append(rd)
+        plt.plot(in_rd, in_amp, colors[i]+'+', label=layer)#+' inhibitory')
+        if layer == 'L1':
+            continue
+        #plt.plot(ex_rd, ex_amp, colors[i]+'o', label=layer+' excitatory')
+else:
+    for i, layer in enumerate(layers):
+        mean_rd_ex = []
+        mean_rd_in = []
+        mean_amp_ex = []
+        mean_amp_in = []
+        L_df = amps[amps.index.str.startswith(layer)]
+        #plt.plot(L_df['r/d'], L_df['8.0']*1000, styles[i], label=layer)
+        models = [model[:-2] for model in L_df.index]
+        unique_models = list(dict.fromkeys(models))
+        for model in unique_models:
+            model_df = L_df[L_df.index.str.startswith(model)]
+            if 'PC' in model or 'SS' in model  or 'SP' in model:
+                all_ex_amp.append(model_df['0'].mean()*1000)
+                all_ex_rd.append(model_df['r/d'].mean())
+                mean_amp_ex.append(model_df['0'].mean()*1000)
+                mean_rd_ex.append(model_df['r/d'].mean())
+            else:
+                all_in_amp.append(model_df['0'].mean()*1000)
+                all_in_rd.append(model_df['r/d'].mean())
+                mean_amp_in.append(model_df['0'].mean()*1000)
+                mean_rd_in.append(model_df['r/d'].mean())
+        #plt.plot(mean_rd_in, mean_amp_in, colors[i]+'+', label=layer)#+' inhibitory')
+        if layer == 'L1':
+            continue
+        plt.plot(mean_rd_ex, mean_amp_ex, colors[i]+'o', label=layer)#+' excitatory')
 
-plt.title('Excitatory amplitudes at 1um outside cell, vclamp')
+plt.title('Inhibitaory amplitudes at 1um outside cell, vclamp, 5 versions of cell models')
 plt.xlabel(r'$\frac{\Sigma d^{\frac{3}{2}}_{dend}}{r_{soma}}$', fontsize=15)
 #plt.axis.label.set_size(40)
 plt.ylabel('Amplitude uV')
-x = np.linspace(1.5, 5, 30)
-m, b = np.polyfit(all_ex_rd, all_ex_amp, 1)
+x = np.linspace(0, 5.5, 30)
+m, b = np.polyfit(all_in_rd, all_in_amp, 1)
 plt.plot(x, m*x+b, 'r--', label='{0:.2f}*x{1:.2f}'.format(m, b))
 plt.legend()
 
-plt.savefig('vclamp_excit_all_amps_at_1um')
+plt.savefig('vclamp_inhib_amps_at_1um_5vs')
